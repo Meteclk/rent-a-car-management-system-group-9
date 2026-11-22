@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: rentacar
+      POSTGRES_USER: rentacar
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-local-course-demo}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes:
+      - rental_pg:/var/lib/postgresql/data
+      - ./database/01_schema.sql:/docker-entrypoint-initdb.d/01.sql:ro
+      - ./database/02_data.sql:/docker-entrypoint-initdb.d/02.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -h 127.0.0.1 -U rentacar -d rentacar"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+  web:
+    build: .
+    ports: ["${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:8000"]
+    environment:
+      PGPASSWORD: ${DB_PASSWORD:-local-course-demo}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-FleetDemo-Admin26}
+      DESK_PASSWORD: ${DESK_PASSWORD:-FleetDemo-Desk26}
+      HTTPS_COOKIE: ${HTTPS_COOKIE:-0}
+    volumes: ["rental_web:/var/lib/rental"]
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      db: {condition: service_healthy}
+    restart: unless-stopped
+volumes:
+  rental_pg:
+  rental_web:

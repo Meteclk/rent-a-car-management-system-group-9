@@ -1,0 +1,33 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start database and web application
+        run: docker compose up -d --build --wait --wait-timeout 300
+
+      - name: Check sample rows and the overlapping-reservation constraint
+        run: docker compose exec -T db psql -v ON_ERROR_STOP=1 -U rentacar -d rentacar -f - < tests/check_db.sql
+
+      - name: Run the report queries
+        run: docker compose exec -T db psql -v ON_ERROR_STOP=1 -U rentacar -d rentacar -f - < database/03_queries.sql
+
+      - name: Test login, roles and customer CRUD over HTTP
+        run: python3 tests/smoke.py http://localhost:8080
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs db web
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v
